@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: wifiuser
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: wifimarketing
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: always
+
+  nextjs:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://wifiuser:password123@postgres:5432/wifimarketing
+    depends_on:
+      - postgres
+    restart: always
+
+volumes:
+  pgdata:
