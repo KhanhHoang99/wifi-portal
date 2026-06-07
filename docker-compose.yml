@@ -21,5 +21,30 @@ services:
       - postgres
     restart: always
 
+  radius:
+    image: freeradius/freeradius-server:latest
+    container_name: wifi_freeradius
+    ports:
+      - "1812:1812/udp"
+      - "1813:1813/udp"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        # 1. Tạo file clients.conf trực tiếp trong container
+        echo "client local_test {
+            ipaddr = 0.0.0.0/0
+            secret = my_wifi_secret_2026
+            require_message_authenticator = no
+        }" > /etc/raddb/clients.conf
+
+        # 2. Tạo file authorize trực tiếp trong container
+        echo "DEFAULT Auth-Type := Accept" > /etc/raddb/mods-config/files/authorize
+
+        # 3. Chạy FreeRADIUS bằng đúng tên lệnh của image
+        exec freeradius -X
+    depends_on:
+      - postgres
+
 volumes:
   pgdata:
