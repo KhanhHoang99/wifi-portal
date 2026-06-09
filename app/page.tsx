@@ -9,17 +9,17 @@ export default function CaptivePortal() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
 
-  // [ARUBA] Lưu các tham số Aruba gửi kèm khi redirect vào portal
+  // [ARUBA FIXED] Hứng chính xác tham số "switch_url" từ Aruba IAP
   const [arubaParams, setArubaParams] = useState({
     mac: "",
     ip: "",
     essid: "",
     apname: "",
-    switchip: "",
+    switchUrl: "",
     url: "",
   });
 
-  // [ARUBA] Đọc tham số từ URL khi page load
+  // Đọc tham số từ URL khi page load
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setArubaParams({
@@ -27,7 +27,7 @@ export default function CaptivePortal() {
       ip: params.get("ip") || "",
       essid: params.get("essid") || "",
       apname: params.get("apname") || "",
-      switchip: params.get("switchip") || "",
+      switchUrl: params.get("switch_url") || "", // Aruba IAP dùng switch_url thay vì switchip
       url: params.get("url") || "",
     });
   }, []);
@@ -38,13 +38,14 @@ export default function CaptivePortal() {
     setError("");
 
     try {
+      // 1. Lưu thông tin vào Database PostgreSQL qua API của bạn
       const res = await fetch("/api/customers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
           phone,
-          macAddress: arubaParams.mac, // [ARUBA] Gửi MAC lên DB
+          macAddress: arubaParams.mac, 
         }),
       });
 
@@ -53,13 +54,37 @@ export default function CaptivePortal() {
 
       setSuccess(true);
 
-      // [ARUBA] Redirect về Aruba để mở internet cho client
-      // switchip là địa chỉ Aruba, url là trang gốc muốn vào
-      if (arubaParams.switchip) {
-        const redirectUrl = `https://${arubaParams.switchip}/login.html?url=${encodeURIComponent(arubaParams.url || "http://google.com")}`;
+      // 2. [ARUBA FIXED] Tự động tạo Form và POST dữ liệu kích hoạt mạng về cho Aruba
+      if (arubaParams.switchUrl) {
         setTimeout(() => {
-          window.location.href = redirectUrl;
-        }, 2000); // Chờ 2 giây cho user thấy màn hình thành công
+          const form = document.createElement("form");
+          form.method = "POST";
+          form.action = arubaParams.switchUrl; // Bắn trực tiếp về endpoint của Aruba
+
+          // Tham số 'user' bắt buộc cho Aruba nhận diện tài khoản gửi sang RADIUS
+          const userInput = document.createElement("input");
+          userInput.type = "hidden";
+          userInput.name = "user";
+          userInput.value = phone; // Dùng SĐT làm Username xác thực
+          form.appendChild(userInput);
+
+          // Tham số 'password' điền mật khẩu mặc định trùng với FreeRADIUS của bạn
+          const passInput = document.createElement("input");
+          passInput.type = "hidden";
+          passInput.name = "password";
+          passInput.value = "123456"; // <<-- Thay đổi mật khẩu này nếu bạn đặt pass khác trong FreeRADIUS
+          form.appendChild(passInput);
+
+          // Tham số 'url' để sau khi Aruba xác thực xong sẽ đẩy khách về trang này
+          const urlInput = document.createElement("input");
+          urlInput.type = "hidden";
+          urlInput.name = "url";
+          urlInput.value = arubaParams.url || "http://google.com";
+          form.appendChild(urlInput);
+
+          document.body.appendChild(form);
+          form.submit(); // Thực hiện lệnh POST để mở mạng
+        }, 2000); // Hiển thị màn hình thành công 2 giây rồi mở mạng
       }
 
     } catch (err: unknown) {
@@ -82,9 +107,8 @@ export default function CaptivePortal() {
           <p className="text-gray-500">
             Chào mừng <span className="font-semibold text-indigo-600">{name}</span>, bạn đã có thể sử dụng WiFi miễn phí.
           </p>
-          {/* [ARUBA] Thông báo đang chuyển hướng */}
-          {arubaParams.switchip && (
-            <p className="text-gray-400 text-sm mt-4">Đang kết nối internet...</p>
+          {arubaParams.switchUrl && (
+            <p className="text-gray-400 text-sm mt-4">Đang kích hoạt Internet...</p>
           )}
         </div>
       </main>
