@@ -56,7 +56,7 @@ export default function CaptivePortal() {
       // [ARUBA] Redirect về Aruba để mở internet cho client
       // switchip là địa chỉ Aruba, url là trang gốc muốn vào
       if (arubaParams.switchip) {
-        const redirectUrl = `https://${arubaParams.switchip}/auth/index.html/u?url=${encodeURIComponent(arubaParams.url || "http://google.com")}`;
+        const redirectUrl = `https://${arubaParams.switchip}/login.html?url=${encodeURIComponent(arubaParams.url || "http://google.com")}`;
         setTimeout(() => {
           window.location.href = redirectUrl;
         }, 2000); // Chờ 2 giây cho user thấy màn hình thành công
