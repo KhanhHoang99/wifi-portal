@@ -9,7 +9,7 @@ export default function CaptivePortal() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
 
-  // [ARUBA FIXED] Hứng chính xác tham số "switch_url" từ Aruba IAP
+  // Lưu các tham số Aruba gửi kèm khi redirect vào portal
   const [arubaParams, setArubaParams] = useState({
     mac: "",
     ip: "",
@@ -19,22 +19,24 @@ export default function CaptivePortal() {
     url: "",
   });
 
-  // Đọc tham số từ URL khi page load
+  // Đọc tham số từ URL khi page load một cách an toàn
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    setArubaParams({
-      mac: params.get("mac") || "",
-      ip: params.get("ip") || "",
-      essid: params.get("essid") || "",
-      apname: params.get("apname") || "",
-      switchUrl: params.get("switch_url") || "", // Aruba IAP dùng switch_url thay vì switchip
-      url: params.get("url") || "",
-    });
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      setArubaParams({
+        mac: params.get("mac") || "",
+        ip: params.get("ip") || "",
+        essid: params.get("essid") || "",
+        apname: params.get("apname") || "",
+        switchUrl: params.get("switch_url") || "", 
+        url: params.get("url") || "",
+      });
+    }
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
+    loading: true && setLoading(true);
     setError("");
 
     try {
@@ -54,38 +56,41 @@ export default function CaptivePortal() {
 
       setSuccess(true);
 
-      // 2. [ARUBA FIXED] Tự động tạo Form và POST dữ liệu kích hoạt mạng về cho Aruba
-      if (arubaParams.switchUrl) {
-        setTimeout(() => {
-          const form = document.createElement("form");
-          form.method = "POST";
-          form.action = arubaParams.switchUrl; // Bắn trực tiếp về endpoint của Aruba
+      // 2. Tự động tạo Form và POST dữ liệu kích hoạt mạng về cho Aruba
+      setTimeout(() => {
+        // Đường dẫn cgi-bin mặc định của dòng Aruba Instant AP
+        const arubaLoginUrl = "https://securelogin.arubanetworks.com/cgi-bin/login";
 
-          // Tham số 'user' bắt buộc cho Aruba nhận diện tài khoản gửi sang RADIUS
-          const userInput = document.createElement("input");
-          userInput.type = "hidden";
-          userInput.name = "user";
-          userInput.value = phone; // Dùng SĐT làm Username xác thực
-          form.appendChild(userInput);
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = arubaLoginUrl; 
 
-          // Tham số 'password' điền mật khẩu mặc định trùng với FreeRADIUS của bạn
-          const passInput = document.createElement("input");
-          passInput.type = "hidden";
-          passInput.name = "password";
-          passInput.value = "123456"; // <<-- Thay đổi mật khẩu này nếu bạn đặt pass khác trong FreeRADIUS
-          form.appendChild(passInput);
+        // Gửi tài khoản là Số điện thoại của khách sang RADIUS
+        const userInput = document.createElement("input");
+        userInput.type = "hidden";
+        userInput.name = "user";
+        userInput.value = phone;
+        form.appendChild(userInput);
 
-          // Tham số 'url' để sau khi Aruba xác thực xong sẽ đẩy khách về trang này
-          const urlInput = document.createElement("input");
-          urlInput.type = "hidden";
-          urlInput.name = "url";
-          urlInput.value = arubaParams.url || "http://google.com";
-          form.appendChild(urlInput);
+        // Gửi mật khẩu trùng với cấu hình trong FreeRADIUS của bạn
+        const passInput = document.createElement("input");
+        passInput.type = "hidden";
+        passInput.name = "password";
+        passInput.value = "123456"; // <<-- Nhớ đổi lại đúng pass trong FreeRADIUS của bạn (nếu có)
+        form.appendChild(passInput);
 
-          document.body.appendChild(form);
-          form.submit(); // Thực hiện lệnh POST để mở mạng
-        }, 2000); // Hiển thị màn hình thành công 2 giây rồi mở mạng
-      }
+        // Giữ lại trang gốc khách muốn truy cập sau khi có mạng
+        const params = new URLSearchParams(window.location.search);
+        const origUrl = params.get("url") || "http://google.com";
+        const urlInput = document.createElement("input");
+        urlInput.type = "hidden";
+        urlInput.name = "url";
+        urlInput.value = origUrl;
+        form.appendChild(urlInput);
+
+        document.body.appendChild(form);
+        form.submit(); // Ép điện thoại gửi lệnh xác thực để Aruba mở mạng
+      }, 2000); // Chờ 2 giây hiện màn hình thành công rồi kích hoạt
 
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
@@ -107,9 +112,7 @@ export default function CaptivePortal() {
           <p className="text-gray-500">
             Chào mừng <span className="font-semibold text-indigo-600">{name}</span>, bạn đã có thể sử dụng WiFi miễn phí.
           </p>
-          {arubaParams.switchUrl && (
-            <p className="text-gray-400 text-sm mt-4">Đang kích hoạt Internet...</p>
-          )}
+          <p className="text-gray-400 text-sm mt-4">Đang kích hoạt Internet...</p> 
         </div>
       </main>
     );
