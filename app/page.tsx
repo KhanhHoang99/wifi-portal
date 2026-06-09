@@ -65,6 +65,13 @@ export default function CaptivePortal() {
         form.method = "POST";
         form.action = arubaLoginUrl; 
 
+
+        const cmdInput = document.createElement("input");
+        cmdInput.type = "hidden";
+        cmdInput.name = "cmd";
+        cmdInput.value = "authenticate";
+        form.appendChild(cmdInput);
+
         // Gửi tài khoản là Số điện thoại của khách sang RADIUS
         const userInput = document.createElement("input");
         userInput.type = "hidden";
