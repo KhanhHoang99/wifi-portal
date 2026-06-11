@@ -9,7 +9,7 @@ export default function CaptivePortal() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
 
-  // Lưu các tham số Aruba gửi kèm khi redirect vào portal
+  // Lưu các tham số thiết bị gửi kèm khi redirect vào portal
   const [arubaParams, setArubaParams] = useState({
     mac: "",
     ip: "",
@@ -24,23 +24,23 @@ export default function CaptivePortal() {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       setArubaParams({
-        mac: params.get("mac") || "",
+        mac: params.get("mac") || params.get("client_mac") || "", // Hỗ trợ lấy MAC cho cả 2 hãng
         ip: params.get("ip") || "",
-        essid: params.get("essid") || "",
+        essid: params.get("essid") || params.get("ssid") || "",
         apname: params.get("apname") || "",
         switchUrl: params.get("switch_url") || "", 
-        url: params.get("url") || "",
+        url: params.get("url") || params.get("orig_url") || "",
       });
     }
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    loading: true && setLoading(true);
+    setLoading(true);
     setError("");
 
     try {
-      // 1. Lưu thông tin vào Database PostgreSQL qua API của bạn
+      // 1. Lưu thông tin vào Database PostgreSQL qua API của bạn (Dùng chung cho cả 2 hãng)
       const res = await fetch("/api/customers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -56,48 +56,77 @@ export default function CaptivePortal() {
 
       setSuccess(true);
 
-      // 2. Tự động tạo Form và POST dữ liệu kích hoạt mạng về cho Aruba
+      // 2. Tự động phân nhánh kích hoạt mạng sau 2 giây cho từng thiết bị
       setTimeout(() => {
-        // Đường dẫn cgi-bin mặc định của dòng Aruba Instant AP
-        const arubaLoginUrl = "https://securelogin.arubanetworks.com/cgi-bin/login";
-
-        const form = document.createElement("form");
-        form.method = "POST";
-        form.action = arubaLoginUrl; 
-
-
-        const cmdInput = document.createElement("input");
-        cmdInput.type = "hidden";
-        cmdInput.name = "cmd";
-        cmdInput.value = "authenticate";
-        form.appendChild(cmdInput);
-
-        // Gửi tài khoản là Số điện thoại của khách sang RADIUS
-        const userInput = document.createElement("input");
-        userInput.type = "hidden";
-        userInput.name = "user";
-        userInput.value = phone;
-        form.appendChild(userInput);
-
-        // Gửi mật khẩu trùng với cấu hình trong FreeRADIUS của bạn
-        const passInput = document.createElement("input");
-        passInput.type = "hidden";
-        passInput.name = "password";
-        passInput.value = "123456"; // <<-- Nhớ đổi lại đúng pass trong FreeRADIUS của bạn (nếu có)
-        form.appendChild(passInput);
-
-        // Giữ lại trang gốc khách muốn truy cập sau khi có mạng
         const params = new URLSearchParams(window.location.search);
-        const origUrl = params.get("url") || "http://google.com";
-        const urlInput = document.createElement("input");
-        urlInput.type = "hidden";
-        urlInput.name = "url";
-        urlInput.value = origUrl;
-        form.appendChild(urlInput);
+        
+        // Đọc tham số "login_url" thực tế mà laptop bạn nhận được từ Grandstream
+        const grandstreamLoginUrl = params.get("login_url");
 
-        document.body.appendChild(form);
-        form.submit(); // Ép điện thoại gửi lệnh xác thực để Aruba mở mạng
-      }, 2000); // Chờ 2 giây hiện màn hình thành công rồi kích hoạt
+        // =========================================================
+        // TRƯỜNG HỢP A: KHÁCH ĐANG KẾT NỐI WI-FI GRANDSTREAM
+        // =========================================================
+        if (grandstreamLoginUrl) {
+          const form = document.createElement("form");
+          form.method = "POST";
+          form.action = grandstreamLoginUrl; // Gửi lệnh POST về http://cwp.gwnportal.cloud:8080/gwn_login
+
+          // Gửi Số điện thoại làm tên tài khoản (User-Name) sang RADIUS
+          const userInput = document.createElement("input");
+          userInput.type = "hidden";
+          userInput.name = "user";
+          userInput.value = phone;
+          form.appendChild(userInput);
+
+          // Gửi mật khẩu trùng cấu hình trong FreeRADIUS của bạn
+          const passInput = document.createElement("input");
+          passInput.type = "hidden";
+          passInput.name = "password";
+          passInput.value = "123456"; 
+          form.appendChild(passInput);
+
+          document.body.appendChild(form);
+          form.submit(); // Thực hiện lệnh mở mạng Grandstream
+        } 
+        // =========================================================
+        // TRƯỜNG HỢP B: KHÁCH ĐANG KẾT NỐI WI-FI ARUBA (Giữ nguyên 100%)
+        // =========================================================
+        else {
+          const arubaLoginUrl = "https://securelogin.arubanetworks.com/cgi-bin/login";
+
+          const form = document.createElement("form");
+          form.method = "POST";
+          form.action = arubaLoginUrl; 
+
+          const cmdInput = document.createElement("input");
+          cmdInput.type = "hidden";
+          cmdInput.name = "cmd";
+          cmdInput.value = "authenticate";
+          form.appendChild(cmdInput);
+
+          const userInput = document.createElement("input");
+          userInput.type = "hidden";
+          userInput.name = "user";
+          userInput.value = phone;
+          form.appendChild(userInput);
+
+          const passInput = document.createElement("input");
+          passInput.type = "hidden";
+          passInput.name = "password";
+          passInput.value = "123456"; 
+          form.appendChild(passInput);
+
+          const origUrl = params.get("url") || "http://google.com";
+          const urlInput = document.createElement("input");
+          urlInput.type = "hidden";
+          urlInput.name = "url";
+          urlInput.value = origUrl;
+          form.appendChild(urlInput);
+
+          document.body.appendChild(form);
+          form.submit(); // Thực hiện lệnh mở mạng Aruba
+        }
+      }, 2000); 
 
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
